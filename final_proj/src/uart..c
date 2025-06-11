@@ -1,62 +1,69 @@
 #include <stm32f0xx.h>
 #include "clock_.h"
-#include <stdio.h>
-void uart_init(void)
-{
-    EPL_SystemClock_Config();
-    const uint8_t UART2_TX_PIN = 2; // PA2
-    const uint8_t UART2_RX_PIN = 3; // PA3
+#include "fifo.h"
 
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN; // Enable GPIOA clock
+// Select the Baudrate for the UART
+#define BAUDRATE 115200 // Baud rate set to 9600 baud per second
+
+volatile Fifo_t usart_rx_fifo;
+
+const uint8_t USART2_RX_PIN = 3; // PA3 is used as USART2_RX
+const uint8_t USART2_TX_PIN = 2; // PA2 is used as USART2_TX
+
+void uart_init(void) {
+    SystemClock_Config(); // Configure the system clock to 48 MHz
+
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;    // Enable GPIOA clock
     RCC->APB1ENR |= RCC_APB1ENR_USART2EN; // Enable USART2 clock
 
-    GPIOA->MODER &= ~(0b11 << (UART2_TX_PIN * 2) | 0b11 << (UART2_RX_PIN * 2)); // Clear PA2 and PA3 mode bits
-    GPIOA->MODER |= (0b10 << (UART2_TX_PIN * 2)) | (0b10 << (UART2_RX_PIN * 2)); // Set PA2 and PA3 to alternate function mode
-    
-    
-    GPIOA->AFR[0] &= ~(0b1111 << (UART2_TX_PIN * 4) | 0b1111 << (UART2_RX_PIN * 4)); // Clear PA2 and PA3 alternate function bits
-    GPIOA->AFR[0] |= (0b0001 << (UART2_TX_PIN * 4)) | (0b0001 << (UART2_RX_PIN * 4)); // Set PA2 and PA3 to AF1 (USART2)
+    GPIOA->MODER |= 0b10 << (USART2_TX_PIN * 2);    // Set PA2 to Alternate Function mode
+    GPIOA->AFR[0] |= 0b0001 << (4 * USART2_TX_PIN); // Set AF for PA2 (USART2_TX)
+    GPIOA->MODER |= 0b10 << (USART2_RX_PIN * 2);    // Set PA3 to Alternate Function mode
+    GPIOA->AFR[0] |= 0b0001 << (4 * USART2_RX_PIN); // Set AF for PA3 (USART2_RX)
 
+    USART2->BRR = (APB_FREQ / BAUDRATE); // Set baud rate (requires APB_FREQ to be defined)
+    USART2->CR1 |= 0b1 << 2;             // Enable receiver (RE bit)
+    USART2->CR1 |= 0b1 << 3;             // Enable transmitter (TE bit)
+    USART2->CR1 |= 0b1 << 0;             // Enable USART (UE bit)
+    USART2->CR1 |= 0b1 << 5;             // Enable RXNE interrupt (RXNEIE bit)
 
-    USART2->BRR = (APB_FREQ / 115200); // Set baud rate to 9600
+    NVIC_SetPriorityGrouping(0);                               // Use 4 bits for priority, 0 bits for subpriority
+    uint32_t uart_pri_encoding = NVIC_EncodePriority(0, 1, 0); // Encode priority: group 1, subpriority 0
+    NVIC_SetPriority(USART2_IRQn, uart_pri_encoding);          // Set USART2 interrupt priority
+    NVIC_EnableIRQ(USART2_IRQn);                               // Enable USART2 interrupt
 
-    USART2->CR1 |= (0b1 << 2 | 0b1 << 3 | 0b1 << 0); // Enable USART2, TX, and RX
+    fifo_init((Fifo_t *)&usart_rx_fifo);                       // Init the FIFO
 }
 
-void uart_write_char(int c)
-{
-    while (!(USART2->ISR & USART_ISR_TXE)); // Wait until TXE (Transmit Data Register Empty) is set
-    USART2->TDR = c; // Write character to transmit data register
-}
-
-void uart_write_string(const char* str)
-{;
-    while(*str)
-    {
-        uart_write_char(*str++); // Write each character in the string
+void USART2_IRQHandler(void) {
+    if (USART2->ISR & USART_ISR_RXNE) { // Check if RXNE flag is set (data received)
+        uint8_t c = USART2->RDR;       // Read received byte from RDR
+        fifo_put((Fifo_t *)&usart_rx_fifo, c); // Put incoming data into the FIFO buffer
     }
 }
 
-char uart_read_char(void)
-{
-    while (!(USART2->ISR & USART_ISR_RXNE)); // Wait until RXNE (Read Data Register Not Empty) is set
-    return USART2->RDR; // Read character from receive data register
+void uart_write_char(int c) {
+    while (!(USART2->ISR & USART_ISR_TXE));
+    USART2->TDR = c; 
 }
 
-int uart_read_line(char* buffer, int max_len)
-{
+void uart_write_string(const char* str) {
+    while (*str) {
+        uart_write_char(*str++); 
+    }
+}
+
+int uart_read_line(char* buffer, int max_len) {
     int i = 0;
-    char c;
+    uint8_t byte;
 
-    while(i < max_len -1)
-    {
-        c = uart_read_char(); // Read character from UART
-        if(c == '\r') continue; // Ignore carriage return
-        if(c == '\n') break; // Stop reading on newline
-        buffer[i++] = c; // Store character in buffer
+    while (i < max_len - 1) {
+        if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0) { 
+            if (byte == '\r') continue; 
+            if (byte == '\n') break;    
+            buffer[i++] = byte;         
+        }
     }
-    buffer[i] = '\0'; // Null-terminate the string
-    return i; // Return the number of characters read
+    buffer[i] = '\0'; 
+    return i;         
 }
-
-
