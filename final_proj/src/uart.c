@@ -67,3 +67,34 @@ int uart_read_line(char* buffer, int max_len) {
     buffer[i] = '\0'; 
     return i;         
 }
+
+//CHAT
+int uart_read_line_non_blocking(char* buffer, int max_len) {
+    static int index = 0;  // Speichert, wie viele Zeichen bisher gelesen wurden
+    uint8_t byte;          // Temporäre Variable für das gelesene Byte
+
+    // Prüfe, ob Daten in der FIFO verfügbar sind
+    if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0) {  
+        // FIFO liefert ein Byte (kein Fehler)
+
+        if (byte == '\r') {
+            // Ignoriere carriage return (ASCII 13)
+            return 0;  // Noch keine vollständige Nachricht
+        }
+
+        if (byte == '\n') {
+            // Nachricht abgeschlossen (newline-Zeichen empfangen)
+            buffer[index] = '\0';  // Null-terminiere den String
+            int len = index;       // Speichere die Länge der Nachricht
+            index = 0;             // Setze den Index zurück für die nächste Nachricht
+            return len;            // Gib die Länge der Nachricht zurück
+        }
+
+        // Füge das Byte zum Puffer hinzu
+        if (index < max_len - 1) {
+            buffer[index++] = byte;  // Speichere das Byte im Puffer
+        }
+    }
+
+    return 0;  // Keine vollständige Nachricht empfangen
+}
