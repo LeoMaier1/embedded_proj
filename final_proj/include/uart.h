@@ -5,5 +5,6 @@ void uart_init(void);
 void uart_write_string(const char* str);
 void uart_write_char(int c);
 int uart_read_line(char* buffer, int max_len);
+int uart_read_line_non_blocking(char* buffer, int max_len);
 
 #endif // UART_H_

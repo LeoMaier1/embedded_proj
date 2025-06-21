@@ -10,7 +10,10 @@
 uint8_t opponent_field[FIELD_SZ][FIELD_SZ]; // Spielfeld des Gegners
 uint8_t original_field[FIELD_SZ][FIELD_SZ]; // Originales Spielfeld
 uint8_t next_shot_row = 0, next_shot_col = 0;
-
+int hit_count = 0;
+int games_played = 0; // Anzahl der gespielten Spiele
+int games_won = 0;    // Anzahl der gewonnenen Spiele
+int target_games = 100; // Anzahl der Spiele, die gespielt werden sollen
 
 typedef enum {
     WAITING_START,
@@ -34,22 +37,22 @@ typedef struct {
 // Schiffsliste nach den Regeln (Länge 5: 1x, Länge 4: 2x, Länge 3: 3x, Länge 2: 4x)
 Ship_t ships[] = {
     // 1x Schiff der Länge 5
-    {0, 0, 5, 1}, // Zeile 0, Spalte 0-4, horizontal
+    {0, 0, 5, 1}, // Zeile 0, Spalte 0, horizontal
 
     // 2x Schiffe der Länge 4  
-    {2, 2, 4, 0}, // Zeile 2-5, Spalte 2, vertikal
-    {7, 0, 4, 1}, // Zeile 7, Spalte 0-3, horizontal
+    {2, 0, 4, 0}, // Zeile 2, Spalte 0, vertikal
+    {1, 9, 4, 0}, // Zeile 1, Spalte 9, vertikal
 
     // 3x Schiffe der Länge 3
-    {1, 6, 3, 0}, // Zeile 1-3, Spalte 6, vertikal
-    {5, 5, 3, 1}, // Zeile 5, Spalte 5-7, horizontal
-    {7, 6, 3, 0}, // Zeile 7-9, Spalte 6, vertikal (korrigiert!)
+    {5, 3, 3, 1}, // Zeile 5, Spalte 3, horizontal
+    {2, 7, 3, 0}, // Zeile 2, Spalte 7, vertikal
+    {7, 5, 3, 1}, // Zeile 7, Spalte 5, horizontal
 
     // 4x Schiffe der Länge 2
-    {0, 7, 2, 1}, // Zeile 0, Spalte 7-8, horizontal
-    {4, 0, 2, 0}, // Zeile 4-5, Spalte 0, vertikal (korrigiert!)
-    {6, 9, 2, 0}, // Zeile 6-7, Spalte 9, vertikal
-    {9, 3, 2, 1}  // Zeile 9, Spalte 3-4, horizontal
+    {0, 6, 2, 1}, // Zeile 0, Spalte 6, horizontal
+    {7, 0, 2, 0}, // Zeile 7, Spalte 0, vertikal
+    {6, 9, 2, 0}, // Zeile 6, Spalte 9, vertikal
+    {9, 5, 2, 1}  // Zeile 9, Spalte 5, horizontal
 };
 const int NUM_SHIPS = 10;
 
@@ -80,9 +83,9 @@ void place_ship(uint8_t field[FIELD_SZ][FIELD_SZ], Ship_t ship) {
     for (int i = 0; i < ship.length; i++) {
         int row = ship.row + (ship.horizontal ? 0 : i);
         int col = ship.col + (ship.horizontal ? i : 0);
-        
+
         if (is_valid_position(row, col)) {
-            field[row][col] = 1;
+            field[row][col] = ship.length;  // Markiere mit der Länge des Schiffs
         }
     }
 }
@@ -105,7 +108,7 @@ void calculate_checksum(uint8_t field[FIELD_SZ][FIELD_SZ], uint8_t checksum[FIEL
     for (int row = 0; row < FIELD_SZ; row++) {
         checksum[row] = 0;
         for (int col = 0; col < FIELD_SZ; col++) {
-            if (field[row][col] == 1) {
+            if (field[row][col] > 0) {  // Zähle jedes Schiffsteil (unabhängig vom Wert)
                 checksum[row]++;
             }
         }
@@ -142,14 +145,14 @@ int parse_boom_message(const char* buffer, int* row, int* col) {
     return 1; // Erfolgreich geparst
 }
 
-int hit_count = 0;  // Globale Variable für die Anzahl der Treffer auf deinem Spielfeld
+
 
 // Überprüft, ob ein Schuss ein Treffer ist und markiert das Feld
 int process_shot(uint8_t field[FIELD_SZ][FIELD_SZ], int row, int col) {
-    if (field[row][col] == 1) {  // Schiffsteil getroffen
-        field[row][col] = 2;     // Markiere das Schiffsteil als getroffen
-        hit_count++;             // Erhöhe die Trefferanzahl
-        return 1;                // Treffer
+    if (field[row][col] > 0) {  // feld mit schiffsteil
+        field[row][col] = 0;    // markiere mit 0 (getroffenes Schiffsteil)
+        hit_count++;            // hitcount für kontrolle von ob game over
+        return 1;               // Hit
     } else {
         if (field[row][col] == 0) {
             field[row][col] = 3; // Ins Wasser geschossen
@@ -158,10 +161,20 @@ int process_shot(uint8_t field[FIELD_SZ][FIELD_SZ], int row, int col) {
     }
 }
 
-void get_next_shot(uint8_t field[FIELD_SZ][FIELD_SZ], uint8_t* row, uint8_t* col) {
+void get_next_shot(uint8_t field[FIELD_SZ][FIELD_SZ], uint8_t* row, uint8_t* col){
     for (int r = 0; r < FIELD_SZ; r++) {
         for (int c = 0; c < FIELD_SZ; c++) {
-            if (field[r][c] == 0) { // Nur leere Felder
+            if (field[r][c] == 0 && (r + c) % 2 == 0) { // diagonale (alle felder mit gerader Summe)
+                *row = r;
+                *col = c;
+                return;
+            }
+        }
+    }
+
+    for(int r = 0; r < FIELD_SZ; r++) {
+        for (int c = 0; c < FIELD_SZ; c++) {
+            if (field[r][c] == 0) { // Nächstes leeres Feld
                 *row = r;
                 *col = c;
                 return;
@@ -191,16 +204,6 @@ void strategy_shot(uint8_t field[FIELD_SZ][FIELD_SZ]) {
     }
 }
 
-int all_ships_sunk(uint8_t field[FIELD_SZ][FIELD_SZ]) {
-    for (int r = 0; r < FIELD_SZ; r++) {
-        for (int c = 0; c < FIELD_SZ; c++) {
-            if (field[r][c] == 1) {  // Noch nicht getroffenes Schiffsteil
-                return 0;  // Es gibt noch Schiffsteile
-            }
-        }
-    }
-    return 1;  // Alle Schiffsteile sind getroffen
-}
 
 void send_game_over(uint8_t field[FIELD_SZ][FIELD_SZ]) {
     for (int r = 0; r < FIELD_SZ; r++) {
@@ -214,13 +217,27 @@ void send_game_over(uint8_t field[FIELD_SZ][FIELD_SZ]) {
     }
 }
 
-void initialize_game(uint8_t field[FIELD_SZ][FIELD_SZ]) {
-    // Generiere das Spielfeld
-    generate_field(field);
+void reset_game(uint8_t field[FIELD_SZ][FIELD_SZ], uint8_t checksum[FIELD_SZ]) {
+    // Reset des Spielfelds
 
-    // Kopiere das Spielfeld in original_field
+    init_field(field);
+
     memcpy(original_field, field, sizeof(original_field));
+    
+    calculate_checksum(field, checksum);
+
+    memset(opponent_field, 0, sizeof(opponent_field)); // Setze das Spielfeld des Gegners auf leer
+
+    hit_count = 0; // Setze hit_count zurück
+    next_shot_row = 0; // Setze die nächste Schussposition zurück
+    next_shot_col = 0; // Setze die nächste Schussposition zurück
+    current_state = WAITING_START; // Setze den Zustand zurück
 }
+
+
+
+
+
 
 int main(void) {
     uint8_t field[FIELD_SZ][FIELD_SZ]; // Spielfeld
@@ -233,6 +250,9 @@ int main(void) {
     // Spielfeld initialisieren
     init_field(field);
 
+    // Kopiere das Spielfeld in original_field
+    memcpy(original_field, field, sizeof(original_field));
+
     // Checksumme berechnen
     calculate_checksum(field, checksum);
 
@@ -240,7 +260,6 @@ int main(void) {
     memset(opponent_field, 0, sizeof(opponent_field)); // Setze das Spielfeld des Gegners auf leer
 
     while (1) {
-        
         int len = uart_read_line_non_blocking(buffer, sizeof(buffer));
 
         switch (current_state) {
@@ -266,15 +285,17 @@ int main(void) {
                     if (parse_boom_message(buffer, &row, &col)) {
                         int is_hit = process_shot(field, row, col);
                         if (is_hit) {
-                            uart_write_string("DH_BOOM_H\n");
-                            hit_count++;  // Treffer zählen
+                            if(hit_count == 30) {
+                                current_state = GAME_OVER;  // Wechsel zu GAME_OVER
+                            }else {
+                                uart_write_string("DH_BOOM_H\n");
+                            }
                         } else {
                             uart_write_string("DH_BOOM_M\n");
                         }
 
                         // Prüfe, ob alle deine Schiffe versenkt wurden
-                        if (hit_count >= 30) {
-                            send_game_over(field);  // Sende das Spielfeld
+                        if (hit_count == 30) {
                             current_state = GAME_OVER;  // Wechsel zu GAME_OVER
                         } else {
                             current_state = MY_TURN;  // Wechsel zu MY_TURN
@@ -289,11 +310,7 @@ int main(void) {
                 break;
 
             case WAITING_FOR_RESPONSE:
-                if (hit_count >= 30) {
-                    send_game_over(field);  // Sende das Spielfeld
-                    current_state = GAME_OVER;  // Wechsel zu GAME_OVER
-                    uart_write_string("DH_SF_SENT\n");  // Debug-Ausgabe
-                } else if (len > 0) {
+                if (len > 0) {
                     if (strncmp(buffer, "HD_BOOM_H", 9) == 0) {
                         opponent_field[next_shot_row][next_shot_col] = 1;
                         current_state = OP_TURN;
@@ -308,12 +325,22 @@ int main(void) {
                 break;
 
             case GAME_OVER:
-                if (all_ships_sunk(field)) {
+                if (hit_count == 30) {
                     // Sende dein Spielfeld
                     send_game_over(field);
+                    games_played++;
+
+                    if (games_played < target_games) {
+                        reset_game(field, checksum); // Setze das Spiel zurück
+                    }
                 } else if (len > 0 && strncmp(buffer, "HD_SF", 5) == 0) {
                     // Gegner hat sein Spielfeld gesendet, du hast gewonnen
+                    games_played++;
+                    games_won++;
                     send_game_over(field);
+                    if (games_played < target_games) {
+                        reset_game(field, checksum); // Setze das Spiel zurück
+                    }
                 }
                 break;
         }
