@@ -4,8 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#define DEVICE_NAME "LEO"
-#define FIELD_SZ 10 // Größe des Spielfelds
+#define DEVICE_NAME "LEO"               // Name des Spielers
+#define FIELD_SZ 10                     // Größe des Spielfelds
 
 #pragma region Global Variables
 
@@ -344,7 +344,7 @@ int main(void)
     while (1)
     {
         // länge der auf der uart empfangenen Nachricht
-        int len = uart_read_line_non_blocking(buffer, sizeof(buffer));
+        int len = uart_read_line_non_blocking(buffer, sizeof(buffer));      // array Buffer in das die uart_read_line_non_blocking schreibt, size of Buffer ist maximale länge
 
         // State-Machine des Spiels
         switch (current_state)
