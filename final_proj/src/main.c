@@ -329,6 +329,7 @@ void reset_game(uint8_t field[FIELD_SZ][FIELD_SZ], uint8_t checksum[FIELD_SZ])
     current_state = WAITING_START;                          // setze den Zustand zurück auf WAITING_START
 }
 #pragma endregion Funktionen
+
 int main(void)
 {
     uint8_t field[FIELD_SZ][FIELD_SZ];  // Spielfeld

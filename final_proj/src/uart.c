@@ -3,7 +3,7 @@
 #include "fifo.h"
 
 // Select the Baudrate for the UART
-#define BAUDRATE 115200 // Baud rate set to 9600 baud per second
+#define BAUDRATE 115200
 
 volatile Fifo_t usart_rx_fifo;
 
@@ -43,30 +43,32 @@ void USART2_IRQHandler(void) {
 }
 
 void uart_write_char(int c) {
-    while (!(USART2->ISR & USART_ISR_TXE));
-    USART2->TDR = c; 
+    while (!(USART2->ISR & USART_ISR_TXE));                     // wartet bis uart sender bereit ist 
+    USART2->TDR = c;                                            // schreibt in TDR Register Daten 
 }
 
-void uart_write_string(const char* str) {
-    while (*str) {
+void uart_write_string(const char* str) {                       // array wird als Pointer übergeben
+    while (*str) {                                              // geht array durch und sendet jedes zeichen mittel uart_write_char
         uart_write_char(*str++); 
     }
 }
-
-int uart_read_line(char* buffer, int max_len) {
+/*
+int uart_read_line(char* buffer, int max_len) {                 // pointer weil empfangener String mus zurückgegeben werden und mit array geht das nicht
     int i = 0;
     uint8_t byte;
 
-    while (i < max_len - 1) {
-        if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0) { 
-            if (byte == '\r') continue; 
-            if (byte == '\n') break;    
-            buffer[i++] = byte;         
+    while (i < max_len - 1) {                                   // schleife läuft bis ende der Zeile erreicht          
+        if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0) {   // fifo get liest byte aus FIFO braucht adresse von fifo und von data beides muss zurückgegeben werden 
+            if (byte == '\r') continue;                         
+            if (byte == '\n') break;                            // nachricht ist fertig
+            buffer[i++] = byte;                                 // schreibt in buffer Array die daten aus dem fifo
         }
     }
-    buffer[i] = '\0'; 
-    return i;         
+    buffer[i] = '\0';                                           // nullterminierung hinzufügen
+    return i;                                                   // länge des strings returnen
 }
+*/
+
 
 //CHAT
 int uart_read_line_non_blocking(char* buffer, int max_len) {
