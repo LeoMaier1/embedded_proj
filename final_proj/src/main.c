@@ -133,7 +133,7 @@ void calculate_checksum(uint8_t field[FIELD_SZ][FIELD_SZ], uint8_t checksum[FIEL
         checksum[row] = 0;                          // initialisieren der Checksumme
         for (int col = 0; col < FIELD_SZ; col++)    // geht jede Spalte durch
         {
-            if (field[row][col] > 0)                // wert in Feld größer als 0 => Schiffsteil
+            if (field[row][col] > 0)                // wert in Feld größer als 0 -> Schiffsteil
             {
                 checksum[row]++;                    // addiert 1 zur Checksumme pro Schiffsteil
             }
@@ -148,7 +148,7 @@ void send_checksum(uint8_t checksum[FIELD_SZ])
 
     for (int i = 0; i < FIELD_SZ; i++)      // geht jede Zeile durch und sendet jede checksumme pro Zeile nacheinander
     {
-        char digit = '0' + checksum[i];     // '0' ist ascii wert 48 => addieren der checksummer ergibt asci code der Zahl in checksum[]
+        char digit = '0' + checksum[i];     // '0' ist ascii wert 48 -> addieren der checksummer ergibt asci code der Zahl in checksum[]
         uart_write_char(digit);             
     }
 
@@ -400,7 +400,15 @@ int main(void)
                     {
                         uart_write_string("DH_BOOM_M\n");               // Miss senden
                     }
-                    current_state = MY_TURN;                            // wechselt zu MY_TURN
+                    if(hit_count == 30)
+                    {
+                        current_state = GAME_OVER;
+                    }
+                    else
+                    {
+                        current_state = MY_TURN;                            // wechselt zu MY_TURN
+                    }
+                    
                 }
             }
             break;

@@ -52,7 +52,7 @@ void uart_write_string(const char* str) {                       // array wird al
         uart_write_char(*str++); 
     }
 }
-/*
+
 int uart_read_line(char* buffer, int max_len) {                 // pointer weil empfangener String mus zurückgegeben werden und mit array geht das nicht
     int i = 0;
     uint8_t byte;
@@ -67,7 +67,7 @@ int uart_read_line(char* buffer, int max_len) {                 // pointer weil 
     buffer[i] = '\0';                                           // nullterminierung hinzufügen
     return i;                                                   // länge des strings returnen
 }
-*/
+
 
 
 //CHAT
